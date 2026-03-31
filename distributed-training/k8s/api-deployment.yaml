@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dt-api
+  namespace: dist-training
+  labels:
+    app: dt-api
+spec:
+  replicas: 2           # Scale to 5+ at 1000 users; HPA handles auto-scaling
+  selector:
+    matchLabels:
+      app: dt-api
+  template:
+    metadata:
+      labels:
+        app: dt-api
+    spec:
+      containers:
+        - name: api
+          image: dist-training-api:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: REDIS_URL
+              value: "redis://redis.dist-training.svc.cluster.local:6379/0"
+            - name: LOG_DIR
+              value: /logs
+            - name: CHECKPOINT_DIR
+              value: /checkpoints
+          envFrom:
+            - secretRef:
+                name: dt-secrets
+                optional: true
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          volumeMounts:
+            - name: logs
+              mountPath: /logs
+            - name: checkpoints
+              mountPath: /checkpoints
+      volumes:
+        - name: logs
+          persistentVolumeClaim:
+            claimName: logs-pvc
+        - name: checkpoints
+          persistentVolumeClaim:
+            claimName: checkpoints-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dt-api
+  namespace: dist-training
+spec:
+  selector:
+    app: dt-api
+  ports:
+    - port: 80
+      targetPort: 8000
+  type: ClusterIP
+---
+# Horizontal Pod Autoscaler — scales API from 2 to 10 pods at 1000 users
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: dt-api-hpa
+  namespace: dist-training
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: dt-api
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

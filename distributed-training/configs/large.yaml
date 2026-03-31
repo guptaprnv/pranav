@@ -1,0 +1,35 @@
+# Large config — 8+ GPUs, FSDP for large models
+# Good for: power-tier users, LLM fine-tuning
+
+job_name: "large-training-run"
+model_name: "llama-7b"
+dataset: "openwebtext"
+data_dir: "/data/openwebtext"
+
+num_epochs: 3
+batch_size: 4              # micro-batch per GPU; effective batch = 4 * 8 GPUs * grad_accum
+learning_rate: 2.0e-4
+weight_decay: 1.0e-2
+max_grad_norm: 1.0
+warmup_steps: 2000
+
+checkpoint_dir: "/checkpoints"
+keep_last_n_checkpoints: 2
+save_every_n_epochs: 1
+log_every_n_steps: 5
+
+distributed:
+  backend: "nccl"
+  strategy: "fsdp"
+  find_unused_parameters: false
+  mixed_precision: true
+  use_bf16: true
+  fsdp_sharding_strategy: "full"
+  fsdp_min_params_to_wrap: 50000000    # wrap layers with >50M params
+
+resources:
+  gpus_per_node: 8
+  num_nodes: 4
+  cpus_per_task: 16
+  memory_gb: 320
+  timeout_hours: 72

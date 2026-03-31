@@ -1,0 +1,32 @@
+# Small config — 1 GPU, fits on a single Mac mini M3 or consumer GPU
+# Good for: prototyping, testing, free-tier users
+
+job_name: "small-training-run"
+model_name: "resnet18"
+dataset: "cifar10"
+data_dir: "/data/cifar10"
+
+num_epochs: 5
+batch_size: 128
+learning_rate: 0.01
+weight_decay: 1.0e-4
+max_grad_norm: 1.0
+warmup_steps: 100
+
+checkpoint_dir: "/checkpoints"
+keep_last_n_checkpoints: 2
+save_every_n_epochs: 1
+log_every_n_steps: 20
+
+distributed:
+  backend: "gloo"          # gloo for CPU/MPS, nccl for CUDA
+  strategy: "ddp"
+  find_unused_parameters: false
+  mixed_precision: false   # off for CPU/MPS
+
+resources:
+  gpus_per_node: 1
+  num_nodes: 1
+  cpus_per_task: 4
+  memory_gb: 16
+  timeout_hours: 2
