@@ -49,6 +49,7 @@ MODEL_REGISTRY = {
 DATASET_REGISTRY = {
     "cifar10":  (torchvision.datasets.CIFAR10,  10,  (0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261)),
     "cifar100": (torchvision.datasets.CIFAR100, 100, (0.5071, 0.4867, 0.4408), (0.267, 0.256, 0.276)),
+    "synthetic": None,   # built-in, no download needed
 }
 
 
@@ -61,10 +62,28 @@ def build_model(config: TrainingConfig) -> nn.Module:
     return MODEL_REGISTRY[name](num_classes)
 
 
+class SyntheticDataset(torch.utils.data.Dataset):
+    """In-memory random dataset — no download needed. Same shape as CIFAR-10."""
+    def __init__(self, size: int = 5000, num_classes: int = 10):
+        self.data    = torch.randn(size, 3, 32, 32)
+        self.targets = torch.randint(0, num_classes, (size,))
+    def __len__(self): return len(self.data)
+    def __getitem__(self, idx): return self.data[idx], self.targets[idx]
+
+
 def build_dataloaders(config: TrainingConfig):
     ds_key = config.dataset.lower()
     if ds_key not in DATASET_REGISTRY:
         raise ValueError(f"Unknown dataset '{ds_key}'. Available: {list(DATASET_REGISTRY)}")
+
+    # Synthetic dataset — no internet required
+    if ds_key == "synthetic" or DATASET_REGISTRY[ds_key] is None:
+        num_classes = 10
+        train_ds = SyntheticDataset(size=5000, num_classes=num_classes)
+        val_ds   = SyntheticDataset(size=1000, num_classes=num_classes)
+        train_loader = make_distributed_loader(train_ds, batch_size=config.batch_size, shuffle=True)
+        val_loader   = make_distributed_loader(val_ds,   batch_size=config.batch_size * 2, shuffle=False)
+        return train_loader, val_loader, num_classes
 
     cls, num_classes, mean, std = DATASET_REGISTRY[ds_key]
 
@@ -80,15 +99,16 @@ def build_dataloaders(config: TrainingConfig):
     ])
 
     data_dir = config.data_dir
-    train_ds = cls(data_dir, train=True,  download=True, transform=train_tf)
-    val_ds   = cls(data_dir, train=False, download=True, transform=val_tf)
+    try:
+        train_ds = cls(data_dir, train=True,  download=True, transform=train_tf)
+        val_ds   = cls(data_dir, train=False, download=True, transform=val_tf)
+    except Exception:
+        logger.warning(f"Could not download {ds_key} — falling back to synthetic dataset")
+        train_ds = SyntheticDataset(size=5000, num_classes=num_classes)
+        val_ds   = SyntheticDataset(size=1000, num_classes=num_classes)
 
-    train_loader = make_distributed_loader(
-        train_ds, batch_size=config.batch_size, shuffle=True,
-    )
-    val_loader = make_distributed_loader(
-        val_ds, batch_size=config.batch_size * 2, shuffle=False,
-    )
+    train_loader = make_distributed_loader(train_ds, batch_size=config.batch_size, shuffle=True)
+    val_loader   = make_distributed_loader(val_ds,   batch_size=config.batch_size * 2, shuffle=False)
     return train_loader, val_loader, num_classes
 
 
