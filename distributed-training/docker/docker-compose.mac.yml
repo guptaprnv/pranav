@@ -39,9 +39,7 @@ services:
       - CHECKPOINT_DIR=/checkpoints
       - PYTHONPATH=/app
       - MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI:-}
-    command: >
-      sh -c "pip install --quiet fastapi uvicorn[standard] redis pyyaml &&
-             uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload"
+    command: ["sh", "-c", "pip install --quiet fastapi 'uvicorn[standard]' redis pyyaml && uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload"]
     ports:
       - "8002:8000"    # use 8002 externally to avoid conflicts
     depends_on:
@@ -66,9 +64,7 @@ services:
       - CHECKPOINT_DIR=/checkpoints
       - PYTHONPATH=/app
       - DT_OWNER=${DT_OWNER:-mac_user}
-    command: >
-      sh -c "pip install --quiet redis pyyaml psutil zeroconf cryptography &&
-             python -m node_agent.__main__ --redis-url redis://redis:6379/0"
+    command: ["sh", "-c", "pip install --quiet redis pyyaml psutil zeroconf cryptography && python -m node_agent.__main__ --redis-url redis://redis:6379/0"]
     depends_on:
       - redis
     restart: unless-stopped
