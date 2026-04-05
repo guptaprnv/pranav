@@ -68,7 +68,7 @@ services:
       - DT_OWNER=${DT_OWNER:-mac_user}
     command: >
       sh -c "pip install --quiet redis pyyaml psutil zeroconf cryptography &&
-             python -m node_agent.__main__ --owner $$DT_OWNER --redis-url redis://redis:6379/0"
+             python -m node_agent.__main__ --redis-url redis://redis:6379/0"
     depends_on:
       - redis
     restart: unless-stopped
