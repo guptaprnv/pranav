@@ -183,6 +183,9 @@ class Peer:
 
     @staticmethod
     def _local_ip() -> str:
+        override = os.environ.get("DT_NODE_IP")
+        if override:
+            return override
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.connect(("8.8.8.8", 80))

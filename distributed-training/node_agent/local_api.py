@@ -1,7 +1,7 @@
 """
 Local HTTP API — lightweight server for the desktop/mobile UI to query.
 
-Endpoints (all on localhost):
+Endpoints:
   GET /status       → agent status + contribution summary
   GET /peer_info    → this node's PeerInfo (used by seed dialer)
   GET /peers        → list of known peers
@@ -9,7 +9,8 @@ Endpoints (all on localhost):
   POST /stop        → stop contributing
   GET /credits      → credit balance
 
-Intentionally minimal — runs on same machine as the desktop app.
+Intentionally minimal — may be bound to localhost for single-device use or
+0.0.0.0 when other LAN devices need to reach the agent.
 """
 from __future__ import annotations
 
@@ -24,7 +25,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def start_local_api(agent: "NodeAgent", port: int = 7777) -> None:
+def start_local_api(agent: "NodeAgent", port: int = 7777, host: str = "0.0.0.0") -> None:
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):
             pass  # silence default request log
@@ -63,6 +64,6 @@ def start_local_api(agent: "NodeAgent", port: int = 7777) -> None:
         def _error(self, status: int, msg: str) -> None:
             self._json({"error": msg}, status)
 
-    server = HTTPServer(("127.0.0.1", port), Handler)
-    logger.info(f"Local API listening on http://127.0.0.1:{port}")
+    server = HTTPServer((host, port), Handler)
+    logger.info(f"Local API listening on http://{host}:{port}")
     server.serve_forever()

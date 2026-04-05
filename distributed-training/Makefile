@@ -63,7 +63,7 @@ mac-logs: ## 📋 Tail Mac mini service logs
 
 .PHONY: mac-status
 mac-status: ## 📊 Show cluster status
-	@curl -s http://localhost:8000/cluster | $(PYTHON) -m json.tool
+	@curl -s http://localhost:8002/cluster | $(PYTHON) -m json.tool
 
 .PHONY: mac-restart
 mac-restart: mac-stop mac-start ## 🔄 Restart Mac mini services
@@ -99,6 +99,12 @@ train-local: ## 💻 Run training locally (CPU, 2 epochs, quick test)
 install: ## 📦 Install Python dependencies
 	pip install -r requirements.txt
 
+.PHONY: peer-start
+peer-start: ## 🔌 Start a native peer worker connected to a remote Redis/API seed
+	@chmod +x scripts/peer_start.sh
+	@DT_OWNER=$(DT_OWNER) DT_REDIS_URL="$(DT_REDIS_URL)" DT_SEEDS="$(DT_SEEDS)" DT_PORT="$(DT_PORT)" \
+	  bash scripts/peer_start.sh
+
 # ────────────────────────────────────────────────────────────────────────────
 ## iPad
 # ────────────────────────────────────────────────────────────────────────────
@@ -123,11 +129,11 @@ ipad-start: ## 📱 Start iPad app (Expo dev server)
 
 .PHONY: jobs
 jobs: ## 📋 List queued training jobs
-	@curl -s http://localhost:8000/jobs | $(PYTHON) -m json.tool
+	@curl -s http://localhost:8002/jobs | $(PYTHON) -m json.tool
 
 .PHONY: credits
 credits: ## 💳 Show credit balance
-	@curl -s "http://localhost:8000/credits?owner=$(DT_OWNER)" \
+	@curl -s "http://localhost:8002/credits?owner=$(DT_OWNER)" \
 	  | $(PYTHON) -m json.tool 2>/dev/null || \
 	  echo "Start mac-start first, then check credits via the iPad app"
 

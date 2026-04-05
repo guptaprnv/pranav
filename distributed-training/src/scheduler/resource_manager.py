@@ -25,6 +25,10 @@ class NodeSpec:
     total_cpus: int
     total_memory_gb: int
     gpu_model: str = "unknown"
+    ip: str = ""
+    hardware_tier: str = "unknown"
+    accelerator_family: str = "cpu"
+    total_slots: int = 1
 
 
 @dataclass
@@ -32,6 +36,7 @@ class Allocation:
     allocation_id: str
     job_id: str
     node_id: str
+    slots: int
     gpus: int
     cpus: int
     memory_gb: int
@@ -62,8 +67,10 @@ class ResourceManager:
     def register_node(self, spec: NodeSpec) -> None:
         key = f"{self.NODE_PREFIX}{spec.node_id}"
         data = asdict(spec)
+        data["total_slots"] = max(1, data.get("total_slots", 1))
         data["registered_at"] = time.time()
         data["used_gpus"] = 0
+        data["used_slots"] = 0
         data["used_cpus"] = 0
         data["used_memory_gb"] = 0
         self._redis.setex(key, self.NODE_TTL * 2, json.dumps(data))
@@ -94,7 +101,14 @@ class ResourceManager:
             free_mem = node["total_memory_gb"] - node["used_memory_gb"]
 
             if free_gpus >= gpus_needed and free_cpus >= cpus_needed and free_mem >= memory_gb_needed:
-                alloc = self._atomic_allocate(node, job_id, gpus_needed, cpus_needed, memory_gb_needed)
+                alloc = self._atomic_allocate(
+                    node,
+                    job_id,
+                    gpus_needed,
+                    gpus_needed,
+                    cpus_needed,
+                    memory_gb_needed,
+                )
                 if alloc:
                     return alloc
 
@@ -114,9 +128,10 @@ class ResourceManager:
         local node = redis.call('GET', KEYS[1])
         if not node then return 0 end
         local n = cjson.decode(node)
-        n['used_gpus'] = n['used_gpus'] - tonumber(ARGV[1])
-        n['used_cpus'] = n['used_cpus'] - tonumber(ARGV[2])
-        n['used_memory_gb'] = n['used_memory_gb'] - tonumber(ARGV[3])
+        n['used_slots'] = (n['used_slots'] or 0) - tonumber(ARGV[1])
+        n['used_gpus'] = n['used_gpus'] - tonumber(ARGV[2])
+        n['used_cpus'] = n['used_cpus'] - tonumber(ARGV[3])
+        n['used_memory_gb'] = n['used_memory_gb'] - tonumber(ARGV[4])
         redis.call('SET', KEYS[1], cjson.encode(n), 'KEEPTTL')
         redis.call('DEL', KEYS[2])
         return 1
@@ -124,7 +139,10 @@ class ResourceManager:
         self._redis.eval(
             script, 2,
             node_key, key,
-            alloc["gpus"], alloc["cpus"], alloc["memory_gb"]
+            alloc.get("slots", alloc["gpus"]),
+            alloc["gpus"],
+            alloc["cpus"],
+            alloc["memory_gb"],
         )
         logger.info(f"Allocation {allocation_id} released for job {alloc['job_id']}")
 
@@ -136,13 +154,38 @@ class ResourceManager:
         nodes = self._list_nodes()
         total_gpus = sum(n["total_gpus"] for n in nodes)
         used_gpus = sum(n["used_gpus"] for n in nodes)
+        total_slots = sum(n["total_slots"] for n in nodes)
+        used_slots = sum(n["used_slots"] for n in nodes)
         return {
             "nodes_online": len(nodes),
             "total_gpus": total_gpus,
             "used_gpus": used_gpus,
             "free_gpus": total_gpus - used_gpus,
             "utilization_pct": round(used_gpus / max(total_gpus, 1) * 100, 1),
+            "total_slots": total_slots,
+            "used_slots": used_slots,
+            "free_slots": total_slots - used_slots,
         }
+
+    def list_nodes(self) -> List[dict]:
+        """Public node listing for placement planners and inspection APIs."""
+        return self._list_nodes()
+
+    def reserve_node(
+        self,
+        node_id: str,
+        job_id: str,
+        slots_needed: int,
+        gpus_needed: int,
+        cpus_needed: int,
+        memory_gb_needed: int,
+    ) -> Optional[Allocation]:
+        node_key = f"{self.NODE_PREFIX}{node_id}"
+        raw = self._redis.get(node_key)
+        if not raw:
+            return None
+        node = json.loads(raw)
+        return self._atomic_allocate(node, job_id, slots_needed, gpus_needed, cpus_needed, memory_gb_needed)
 
     # ------------------------------------------------------------------
     # Internal
@@ -154,10 +197,24 @@ class ResourceManager:
         for k in keys:
             raw = self._redis.get(k)
             if raw:
-                nodes.append(json.loads(raw))
+                node = json.loads(raw)
+                node.setdefault("total_slots", max(node.get("total_gpus", 0), 1))
+                node.setdefault("used_slots", node.get("used_gpus", 0))
+                node.setdefault("accelerator_family", "cpu")
+                node.setdefault("hardware_tier", "unknown")
+                node.setdefault("ip", "")
+                nodes.append(node)
         return nodes
 
-    def _atomic_allocate(self, node: dict, job_id: str, gpus: int, cpus: int, memory_gb: int) -> Optional[Allocation]:
+    def _atomic_allocate(
+        self,
+        node: dict,
+        job_id: str,
+        slots: int,
+        gpus: int,
+        cpus: int,
+        memory_gb: int,
+    ) -> Optional[Allocation]:
         import uuid
         alloc_id = str(uuid.uuid4())[:8]
         node_key = f"{self.NODE_PREFIX}{node['node_id']}"
@@ -167,30 +224,44 @@ class ResourceManager:
         local node = redis.call('GET', KEYS[1])
         if not node then return 0 end
         local n = cjson.decode(node)
+        local free_slots = (n['total_slots'] or 1) - (n['used_slots'] or 0)
         local free_gpus = n['total_gpus'] - n['used_gpus']
         local free_cpus = n['total_cpus'] - n['used_cpus']
         local free_mem = n['total_memory_gb'] - n['used_memory_gb']
-        if free_gpus < tonumber(ARGV[1]) then return 0 end
-        if free_cpus < tonumber(ARGV[2]) then return 0 end
-        if free_mem < tonumber(ARGV[3]) then return 0 end
-        n['used_gpus'] = n['used_gpus'] + tonumber(ARGV[1])
-        n['used_cpus'] = n['used_cpus'] + tonumber(ARGV[2])
-        n['used_memory_gb'] = n['used_memory_gb'] + tonumber(ARGV[3])
+        if free_slots < tonumber(ARGV[1]) then return 0 end
+        if free_gpus < tonumber(ARGV[2]) then return 0 end
+        if free_cpus < tonumber(ARGV[3]) then return 0 end
+        if free_mem < tonumber(ARGV[4]) then return 0 end
+        n['used_slots'] = (n['used_slots'] or 0) + tonumber(ARGV[1])
+        n['used_gpus'] = n['used_gpus'] + tonumber(ARGV[2])
+        n['used_cpus'] = n['used_cpus'] + tonumber(ARGV[3])
+        n['used_memory_gb'] = n['used_memory_gb'] + tonumber(ARGV[4])
         redis.call('SET', KEYS[1], cjson.encode(n), 'KEEPTTL')
-        redis.call('SETEX', KEYS[2], 86400, ARGV[4])
+        redis.call('SETEX', KEYS[2], 86400, ARGV[5])
         return 1
         """
         alloc_data = json.dumps({
             "allocation_id": alloc_id, "job_id": job_id,
-            "node_id": node["node_id"], "gpus": gpus,
+            "node_id": node["node_id"], "slots": slots,
+            "gpus": gpus,
             "cpus": cpus, "memory_gb": memory_gb,
             "allocated_at": time.time(),
         })
-        result = self._redis.eval(script, 2, node_key, alloc_key, gpus, cpus, memory_gb, alloc_data)
+        result = self._redis.eval(
+            script,
+            2,
+            node_key,
+            alloc_key,
+            slots,
+            gpus,
+            cpus,
+            memory_gb,
+            alloc_data,
+        )
         if result == 1:
             return Allocation(
                 allocation_id=alloc_id, job_id=job_id,
-                node_id=node["node_id"], gpus=gpus,
+                node_id=node["node_id"], slots=slots, gpus=gpus,
                 cpus=cpus, memory_gb=memory_gb,
                 allocated_at=time.time(),
             )

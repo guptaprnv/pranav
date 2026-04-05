@@ -65,7 +65,7 @@ DT_OWNER="$DT_OWNER" $DOCKER_COMPOSE \
 # Wait for API to become healthy
 echo -n "  Waiting for API server"
 for i in $(seq 1 30); do
-    if curl -sf "http://localhost:8000/health" &>/dev/null; then
+    if curl -sf "http://localhost:8002/health" &>/dev/null; then
         echo ""
         ok "API server is up"
         break
@@ -75,7 +75,7 @@ for i in $(seq 1 30); do
 done
 
 # ── 5. Print iPad connection info ─────────────────────────────────────────────
-API_URL="http://${MAC_IP}:8000"
+API_URL="http://${MAC_IP}:8002"
 AGENT_URL="http://${MAC_IP}:7777"
 
 echo ""

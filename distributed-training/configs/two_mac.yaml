@@ -1,0 +1,32 @@
+# Two-Mac smoke config — meant for Apple Silicon / CPU clusters on a LAN.
+# Uses gloo + synthetic data so you can validate cross-machine torchrun first.
+
+job_name: "two-mac-smoke"
+model_name: "resnet18"
+dataset: "synthetic"
+data_dir: "/tmp/data"
+
+num_epochs: 3
+batch_size: 32
+learning_rate: 1.0e-3
+weight_decay: 1.0e-4
+max_grad_norm: 1.0
+warmup_steps: 50
+
+checkpoint_dir: "/tmp/checkpoints"
+keep_last_n_checkpoints: 2
+save_every_n_epochs: 1
+log_every_n_steps: 10
+
+distributed:
+  backend: "gloo"
+  strategy: "ddp"
+  find_unused_parameters: false
+  mixed_precision: false
+
+resources:
+  gpus_per_node: 1
+  num_nodes: 2
+  cpus_per_task: 4
+  memory_gb: 8
+  timeout_hours: 2

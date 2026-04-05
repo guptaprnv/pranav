@@ -71,7 +71,7 @@ DT_OWNER="$DT_OWNER" $DOCKER_COMPOSE \
 # Wait for API
 echo -n "  Waiting for API server"
 for i in $(seq 1 20); do
-    curl -sf http://localhost:8000/health &>/dev/null && { echo ""; ok "API ready"; break; }
+    curl -sf http://localhost:8002/health &>/dev/null && { echo ""; ok "API ready"; break; }
     echo -n "."; sleep 3
 done
 
@@ -144,8 +144,8 @@ echo "  ╔═══════════════════════
 echo "  ║  Training run complete! 🎉              ║"
 echo "  ╚════════════════════════════════════════╝"
 echo -e "${NC}"
-echo "  Dashboard:   http://localhost:8000/docs"
-echo "  Cluster:     http://localhost:8000/cluster"
+echo "  Dashboard:   http://localhost:8002/docs"
+echo "  Cluster:     http://localhost:8002/cluster"
 echo "  iPad app:    Connect to http://${MAC_IP}:7777"
 echo ""
 echo "  Checkpoints: docker exec \$(docker ps -qf name=api) ls /checkpoints"

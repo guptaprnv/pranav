@@ -70,29 +70,19 @@ A100-equivalent training.
 
 ## Quick Start
 
-### 1. Start Redis
+### Recommended: Docker on Mac mini
 ```bash
-docker run -d -p 6379:6379 redis:7-alpine
+DT_OWNER=your_username docker compose -f docker/docker-compose.mac.yml up -d --force-recreate
 ```
 
-### 2. Install Python dependencies
-```bash
-pip install -r requirements.txt
-```
+Host endpoints:
+- API: `http://localhost:8002`
+- Node agent: `http://localhost:7777`
+- Redis: `redis://localhost:6379/0`
 
-### 3. Start the API server
+### Submit a training job
 ```bash
-uvicorn api.main:app --host 0.0.0.0 --port 8000
-```
-
-### 4. Start a node agent (contributes compute + joins P2P network)
-```bash
-python -m node_agent --owner your_username --redis-url redis://localhost:6379/0
-```
-
-### 5. Submit a training job
-```bash
-curl -X POST http://localhost:8000/jobs \
+curl -X POST http://localhost:8002/jobs \
   -H 'Content-Type: application/json' \
   -d '{
     "job_name": "my-resnet",
@@ -102,10 +92,21 @@ curl -X POST http://localhost:8000/jobs \
   }'
 ```
 
-### 6. Check job status
+### Check job status
 ```bash
-curl http://localhost:8000/jobs/<job_id>
+curl http://localhost:8002/jobs/<job_id>
 ```
+
+### Manual dev mode
+If you want to run services outside Docker during development:
+
+```bash
+pip install -r requirements.txt
+PYTHONPATH=. uvicorn api.main:app --host 0.0.0.0 --port 8001
+PYTHONPATH=. python -m node_agent.__main__ --owner your_username --redis-url redis://localhost:6379/0 --port 7777
+```
+
+Use either the Docker API on `8002` or the manual API on `8001`, not both at once.
 
 ---
 

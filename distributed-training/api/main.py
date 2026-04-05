@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from src.scheduler.job_queue import JobQueue, Job, JobStatus, JobPriority
+from src.scheduler.placement import PlacementPlanner
 from src.scheduler.resource_manager import ResourceManager
 
 app = FastAPI(
@@ -40,6 +41,10 @@ def get_queue() -> JobQueue:
 
 def get_resource_manager() -> ResourceManager:
     return ResourceManager(redis_url=_REDIS_URL)
+
+
+def get_planner() -> PlacementPlanner:
+    return PlacementPlanner(redis_url=_REDIS_URL)
 
 
 # ------------------------------------------------------------------
@@ -76,8 +81,31 @@ class ClusterSummary(BaseModel):
     total_gpus: int
     used_gpus: int
     free_gpus: int
+    total_slots: int = 0
+    used_slots: int = 0
+    free_slots: int = 0
     utilization_pct: float
     queue_depth: dict
+
+
+class NodeSummary(BaseModel):
+    node_id: str
+    hostname: str
+    ip: str
+    accelerator_family: str
+    hardware_tier: str
+    total_gpus: int
+    used_gpus: int
+    total_slots: int
+    used_slots: int
+    total_cpus: int
+    used_cpus: int
+    total_memory_gb: int
+    used_memory_gb: int
+
+
+class DispatchResponse(BaseModel):
+    dispatched_job_ids: List[str]
 
 
 # ------------------------------------------------------------------
@@ -90,7 +118,11 @@ async def health():
 
 
 @app.post("/jobs", response_model=JobResponse, status_code=201)
-async def submit_job(req: SubmitJobRequest, queue: JobQueue = Depends(get_queue)):
+async def submit_job(
+    req: SubmitJobRequest,
+    queue: JobQueue = Depends(get_queue),
+    planner: PlacementPlanner = Depends(get_planner),
+):
     priority_map = {
         "high": JobPriority.HIGH,
         "normal": JobPriority.NORMAL,
@@ -108,7 +140,8 @@ async def submit_job(req: SubmitJobRequest, queue: JobQueue = Depends(get_queue)
         estimated_hours=req.estimated_hours,
     )
     queue.submit(job)
-    return _to_response(job)
+    planner.dispatch_job(job)
+    return _to_response(queue.get(job.job_id) or job)
 
 
 @app.get("/jobs/{job_id}", response_model=JobResponse)
@@ -144,6 +177,16 @@ async def cluster_status(
     summary = rm.cluster_summary()
     summary["queue_depth"] = queue.queue_depth()
     return summary
+
+
+@app.get("/nodes", response_model=List[NodeSummary])
+async def list_nodes(rm: ResourceManager = Depends(get_resource_manager)):
+    return rm.list_nodes()
+
+
+@app.post("/scheduler/dispatch", response_model=DispatchResponse)
+async def dispatch_pending_jobs(planner: PlacementPlanner = Depends(get_planner)):
+    return DispatchResponse(dispatched_job_ids=planner.dispatch_pending_jobs())
 
 
 # ------------------------------------------------------------------

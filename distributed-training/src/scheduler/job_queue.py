@@ -153,6 +153,29 @@ class JobQueue:
         self._redis.delete(f"running:{worker_id}")
         logger.info(f"Job {job_id} finished: {status}")
 
+    def start_job(self, job_id: str) -> bool:
+        """Mark a queued job as running and remove it from pending queues."""
+        job = self.get(job_id)
+        if not job:
+            return False
+        for key in self.QUEUE_KEYS.values():
+            self._redis.zrem(key, job_id)
+        job.status = JobStatus.RUNNING
+        job.started_at = time.time()
+        self._redis.setex(f"jobs:{job_id}", self.JOB_TTL, job.to_json())
+        return True
+
+    def finish_job(self, job_id: str, success: bool, error: str = "") -> bool:
+        """Mark a distributed job as completed or failed."""
+        job = self.get(job_id)
+        if not job:
+            return False
+        job.status = JobStatus.COMPLETED if success else JobStatus.FAILED
+        job.finished_at = time.time()
+        job.error = error or None
+        self._redis.setex(f"jobs:{job_id}", self.JOB_TTL, job.to_json())
+        return True
+
     # ------------------------------------------------------------------
     # Inspection API
     # ------------------------------------------------------------------
