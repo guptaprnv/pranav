@@ -1,0 +1,31 @@
+# Peer network configuration
+# Copy to ~/.dt_node/network.yaml and edit for your setup
+
+# Your username / email
+owner: "your_username"
+
+# Redis URL — can be local (Mac mini), cloud (Redis Cloud), or Docker
+redis_url: "redis://localhost:6379/0"
+
+# Cloud backup settings
+cloud_backend: "local"       # local | s3 | gcs | azure
+# s3_bucket: "my-dt-backups"
+# gcs_bucket: "my-dt-backups"
+
+# P2P network
+p2p:
+  port: 7777                 # local agent HTTP + peer port
+  enable_mdns: true          # auto-discover on LAN (Mac mini clusters)
+  seeds:                     # static peers (set for multi-site / cloud)
+    []
+    # - "192.168.1.10:7777"
+    # - "my-cloud-node.example.com:7777"
+
+# Hardware override (auto-detected if not set)
+# hardware_tier: "apple_m3"
+
+# Contribution settings
+contribution:
+  auto_start: true           # start contributing on agent launch
+  max_cpu_percent: 80        # don't use more than 80% CPU
+  pause_on_battery: true     # pause if laptop is on battery (iPad: always active)

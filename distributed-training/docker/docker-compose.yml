@@ -1,0 +1,71 @@
+version: "3.9"
+
+# Local dev / small deployment (up to ~5 concurrent jobs)
+# For production scale (1000 users) → deploy on Kubernetes (see k8s/)
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 2gb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      retries: 5
+
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - LOG_DIR=/logs
+      - CHECKPOINT_DIR=/checkpoints
+      - MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI:-}
+    volumes:
+      - logs:/logs
+      - checkpoints:/checkpoints
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.worker
+    deploy:
+      replicas: 2          # Scale this up for more concurrent jobs
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - LOG_DIR=/logs
+      - CHECKPOINT_DIR=/checkpoints
+      - NCCL_DEBUG=WARN
+    volumes:
+      - logs:/logs
+      - checkpoints:/checkpoints
+      - /data:/data:ro     # Training data (read-only)
+    runtime: nvidia        # Remove if no GPU available
+    depends_on:
+      - redis
+
+  # MLflow tracking server (optional, enable by setting MLFLOW_TRACKING_URI)
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.11.1
+    ports:
+      - "5000:5000"
+    command: mlflow server --host 0.0.0.0 --backend-store-uri /mlruns
+    volumes:
+      - mlruns:/mlruns
+    profiles:
+      - mlflow   # docker compose --profile mlflow up
+
+volumes:
+  redis_data:
+  logs:
+  checkpoints:
+  mlruns:

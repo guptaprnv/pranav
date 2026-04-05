@@ -1,0 +1,82 @@
+version: "3.9"
+
+# Mac mini deployment
+# Exposes API on 0.0.0.0 so the iPad (same LAN) can reach it.
+#
+# Usage:
+#   docker compose -f docker/docker-compose.mac.yml up -d
+#
+# iPad connects to:  http://<mac-mini-local-ip>:8000
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 1gb
+      --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - ..:/app
+      - logs:/logs
+      - checkpoints:/checkpoints
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - LOG_DIR=/logs
+      - CHECKPOINT_DIR=/checkpoints
+      - PYTHONPATH=/app
+      - MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI:-}
+    command: >
+      sh -c "pip install --quiet fastapi uvicorn[standard] redis pyyaml &&
+             uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload"
+    ports:
+      - "8000:8000"    # iPad connects here over LAN
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      interval: 10s
+      retries: 5
+    restart: unless-stopped
+
+  node-agent:
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - ..:/app
+      - logs:/logs
+      - checkpoints:/checkpoints
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - LOG_DIR=/logs
+      - CHECKPOINT_DIR=/checkpoints
+      - PYTHONPATH=/app
+      - DT_OWNER=${DT_OWNER:-mac_user}
+    command: >
+      sh -c "pip install --quiet redis pyyaml psutil zeroconf cryptography &&
+             python -m node_agent.__main__
+               --owner ${DT_OWNER:-mac_user}
+               --redis-url redis://redis:6379/0"
+    network_mode: host      # needs host network for mDNS broadcast + LAN discovery
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+  logs:
+  checkpoints:

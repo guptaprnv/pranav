@@ -1,0 +1,21 @@
+FROM nvcr.io/nvidia/pytorch:24.01-py3
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    redis-tools openssh-client && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY src/ src/
+COPY configs/ configs/
+COPY scripts/ scripts/
+
+ENV PYTHONPATH=/app
+ENV LOG_DIR=/logs
+ENV CHECKPOINT_DIR=/checkpoints
+
+# Worker: polls job queue and launches torchrun
+CMD ["python", "-m", "src.worker"]
