@@ -62,35 +62,54 @@ def get_or_create_security_group(ec2, region: str) -> str:
 
 
 def find_ami(ec2, region: str) -> str:
-    """Find the latest Deep Learning AMI for the region."""
-    # Try region-specific known AMI first
-    known = AMI_ID_MAP.get(region)
-    if known:
-        try:
-            ec2.describe_images(ImageIds=[known])
-            return known
-        except ClientError:
-            pass  # AMI not found in this account/region, fall through
+    """Find the best available AMI — tries Deep Learning AMIs first, falls back to Ubuntu 22.04."""
 
-    # Search for latest DLAMI
+    # Strategy 1: AWS Deep Learning AMI (Ubuntu 22.04) — PyTorch pre-installed
+    for name_pattern in [
+        "Deep Learning AMI GPU PyTorch 2* Ubuntu 22.04*",
+        "Deep Learning AMI GPU PyTorch* Ubuntu*",
+        "Deep Learning Base GPU AMI (Ubuntu 22.04)*",
+        "Deep Learning AMI (Ubuntu 22.04)*",
+    ]:
+        try:
+            resp = ec2.describe_images(
+                Owners=["amazon"],
+                Filters=[
+                    {"Name": "name",             "Values": [name_pattern]},
+                    {"Name": "state",            "Values": ["available"]},
+                    {"Name": "architecture",     "Values": ["x86_64"]},
+                    {"Name": "root-device-type", "Values": ["ebs"]},
+                ],
+            )
+            images = sorted(resp["Images"], key=lambda x: x["CreationDate"], reverse=True)
+            if images:
+                ami_id = images[0]["ImageId"]
+                print(f"  ✓ Deep Learning AMI: {ami_id} ({images[0]['Name'][:70]})")
+                return ami_id
+        except ClientError:
+            continue
+
+    # Strategy 2: Ubuntu 22.04 LTS (canonical) — installs PyTorch via UserData
+    print("  ⚠ No Deep Learning AMI found — using Ubuntu 22.04 LTS (will install PyTorch in UserData)")
     resp = ec2.describe_images(
-        Owners=["amazon"],
+        Owners=["099720109477"],   # Canonical
         Filters=[
-            {"Name": "name",              "Values": [FALLBACK_AMI_SEARCH_NAME]},
-            {"Name": "state",             "Values": ["available"]},
-            {"Name": "architecture",      "Values": ["x86_64"]},
-            {"Name": "root-device-type",  "Values": ["ebs"]},
+            {"Name": "name",             "Values": ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]},
+            {"Name": "state",            "Values": ["available"]},
+            {"Name": "architecture",     "Values": ["x86_64"]},
+            {"Name": "root-device-type", "Values": ["ebs"]},
         ],
     )
     images = sorted(resp["Images"], key=lambda x: x["CreationDate"], reverse=True)
-    if not images:
-        raise RuntimeError(
-            f"No Deep Learning AMI found in {region}. "
-            "Try us-east-1 or check: https://aws.amazon.com/releasenotes/aws-deep-learning-amis/"
-        )
-    ami_id = images[0]["ImageId"]
-    print(f"  ✓ Using AMI: {ami_id} ({images[0]['Name'][:60]})")
-    return ami_id
+    if images:
+        ami_id = images[0]["ImageId"]
+        print(f"  ✓ Ubuntu 22.04 AMI: {ami_id} ({images[0]['Name']})")
+        return ami_id
+
+    raise RuntimeError(
+        f"Could not find any suitable AMI in {region}. "
+        "Check your AWS region: aws ec2 describe-regions --output table"
+    )
 
 
 def get_or_create_iam_profile(iam) -> str:
@@ -153,26 +172,37 @@ def make_user_data(minutes: int, model: str, dataset: str) -> str:
     Installs the repo + deps, then runs training for `minutes` minutes.
     """
     script = f"""#!/bin/bash
-set -e
 exec > /var/log/dtrain.log 2>&1
 
-echo "=== DTrain 5-min training started at $(date) ==="
+echo "=== DTrain training started at $(date) ==="
+echo "=== Model: {model} | Dataset: {dataset} | Minutes: {minutes} ==="
 
-# Activate PyTorch conda env (pre-installed on DLAMI)
-source /opt/conda/etc/profile.d/conda.sh
-conda activate pytorch
+# ── Python / PyTorch setup ────────────────────────────────────────────
+# Try DLAMI conda env first, fall back to pip install
+if [ -f /opt/conda/etc/profile.d/conda.sh ]; then
+    source /opt/conda/etc/profile.d/conda.sh
+    conda activate pytorch 2>/dev/null || conda activate base
+    echo "Using conda: $(python --version)"
+else
+    echo "No conda found — installing Python deps via pip"
+    apt-get update -qq
+    apt-get install -y -qq python3-pip python3-dev git
+    pip3 install --quiet torch torchvision --index-url https://download.pytorch.org/whl/cu118
+    pip3 install --quiet fastapi uvicorn redis pyyaml psutil
+    ln -sf /usr/bin/python3 /usr/bin/python 2>/dev/null || true
+fi
 
-# Clone repo
+# ── Clone repo ────────────────────────────────────────────────────────
 cd /home/ubuntu
-git clone https://github.com/guptaprnv/pranav.git repo || true
+git clone https://github.com/guptaprnv/pranav.git repo 2>/dev/null || \
+    (cd repo && git pull)
 cd repo/distributed-training
 
-# Install deps
-pip install --quiet -r requirements.txt
+pip install --quiet -r requirements.txt 2>/dev/null || true
 
-# Run training — exits after {minutes} minutes
-echo "=== Starting training: {model} on {dataset} for {minutes} min ==="
-python -m src.train \\
+# ── Run training ──────────────────────────────────────────────────────
+echo "=== Starting training ==="
+PYTHONPATH=. python -m src.train \\
     --config configs/small.yaml \\
     --max_minutes {minutes} \\
     --job_id aws-5min-$(date +%s)
