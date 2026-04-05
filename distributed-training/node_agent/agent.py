@@ -260,6 +260,9 @@ class NodeAgent:
         return "unknown"
 
     def _accelerator_family(self) -> str:
+        override = os.environ.get("DT_ACCELERATOR_FAMILY")
+        if override:
+            return override
         if self.peer.info.gpu_count > 0:
             return "cuda"
         if self._hardware_tier.startswith("apple_") or self._hardware_tier.startswith("ipad_"):

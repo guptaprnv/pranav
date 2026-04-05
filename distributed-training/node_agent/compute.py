@@ -3,6 +3,7 @@ Hardware detection — identifies the device tier for contribution weighting.
 """
 from __future__ import annotations
 
+import os
 import platform
 import subprocess
 import logging
@@ -14,6 +15,10 @@ def detect_hardware_tier() -> str:
     """
     Returns one of the tier keys defined in ledger/contribution.py TIER_MULTIPLIERS.
     """
+    override = os.environ.get("DT_HARDWARE_TIER")
+    if override:
+        return override
+
     system = platform.system()
 
     # macOS Apple Silicon detection
@@ -36,6 +41,15 @@ def _detect_apple_silicon() -> str:
     except Exception:
         chip = ""
 
+    if not chip:
+        try:
+            chip = subprocess.check_output(
+                ["system_profiler", "SPHardwareDataType"],
+                stderr=subprocess.DEVNULL,
+            ).decode().strip().lower()
+        except Exception:
+            chip = ""
+
     try:
         model = subprocess.check_output(
             ["sysctl", "-n", "hw.model"], stderr=subprocess.DEVNULL
@@ -55,6 +69,11 @@ def _detect_apple_silicon() -> str:
     if "m2" in chip:
         return "apple_m2"
     if "m1" in chip:
+        return "apple_m1"
+
+    # Fallback: if we are on arm64 macOS, treat as Apple Silicon even when the
+    # chip string is unavailable from sysctl on this machine/runtime.
+    if platform.machine().lower() == "arm64":
         return "apple_m1"
 
     return "cpu_laptop"
