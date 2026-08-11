@@ -298,6 +298,15 @@ As an RA, published research isn't just a UX artifact — it's a regulated recor
 
 Every claim the Reasoning Agent makes should carry an inline citation to exactly where it came from — "portfolio beta of 1.3, computed [date]," "per Q2 FY26 concall, filed [date]," "per [news source], [date]." This isn't a nice-to-have layered on top; it's the same mechanism that makes the grounding evals and the audit log checkable by a human, not just by another model. The Explanation Layer should preserve citations through the lenient-terms rewrite — possibly presented more lightly (a footnote, or "as of [date]") rather than a full source line — rather than stripping them out for readability, since dropping them would undermine both user trust and the audit trail in the same move.
 
+### Deeper engineering design — companion docs
+
+This section stays at the architecture level on purpose. The detailed technical design that follows from it lives in separate docs rather than growing this one indefinitely:
+
+- [`engineering/data-architecture.md`](./engineering/data-architecture.md) — storage layer, entity graph, entity caching & staleness, and the Phase 1 fixture-based user-holdings approach
+- [`engineering/concall-extraction.md`](./engineering/concall-extraction.md) — how a raw transcript becomes the structured concall signal
+- [`engineering/reasoning-agent-architecture.md`](./engineering/reasoning-agent-architecture.md) — tool-calling orchestration and the validation/citation/audit gate sequence
+- [`engineering/open-risks.md`](./engineering/open-risks.md) — model/agent/data gaps not yet resolved by the design, including two real open ones: multi-turn compliance drift and prompt-injection resistance at content-ingestion points
+
 ## 8. MVP scope recommendation
 
 Building all four domains × both personas at once is too much surface for a first version. Two axes matter for sequencing, not one:
@@ -357,3 +366,5 @@ Researched two clusters of existing Indian products against our four domains: st
 ## 12. Next steps
 
 Once data sourcing is confirmed and the Explanation Layer's compliance boundary (open question 3) has a concrete answer, this doc has enough to break Phase 1 into: (a) quant primitives service (drift/concentration/correlation/alpha/beta/VaR calculators), (b) data ingestion for prices + AMFI MF holdings, (c) RA reasoning agent grounded on (a)+(b), (d) Explanation Layer translating (c) for retail, (e) dashboard/list surface for retail and analyst views.
+
+**Coding starts with fixture-based user holdings, not a live broker/demat integration.** Real holdings data is deferred to a later phase; the first build exercises the entity graph, quant primitives, and reasoning pipeline against realistic mock holdings shaped exactly like a real broker feed would arrive, so swapping in live data later is a data-source change, not a schema change. Detail in [`engineering/data-architecture.md`](./engineering/data-architecture.md#phase-1-build-note-fixture-based-user-holdings).
