@@ -112,6 +112,8 @@ Four domains, each decomposed into concrete sub-analyses. RA registration covers
 
 **New from this round: concall vocal-tone analysis as a signal, alongside the transcript.** Earnings conference calls are already a data source via their text transcript (News/events). What's new is treating the *audio itself* as a second, distinct signal — management's tone, hesitation, and confidence while answering questions, which academic finance research and some analytics vendors have found carries information beyond what the transcript text alone conveys. Architecturally this is a **Quant Primitives** input, not a Reasoning Agent guess: a dedicated audio/NLP model produces a structured, versioned score (e.g. a confidence/evasiveness score per Q&A segment) that's auditable the same way alpha/beta/VaR are — the reasoning agent explains *why* the tone score moved, it doesn't invent a tone score from vibes. Applies directly to Stock's Sentiment & Trust sub-analysis and to Mutual Funds' Fund Manager Profile (the same technique run on fund manager commentary/interviews instead of company management), and it's a natural fit for the "event impact thesis" query pattern from the original notes — a concall is a discrete, dated event with both a text and an audio signal to reason over.
 
+**Also new: the Concall Monitor — this is what turns the signal above into an active capability, not a passive data source.** For every company (and fund) a user holds or follows, the platform tracks the earnings-announcement calendar and, as each concall happens, automatically ingests it and produces a structured overview — transcript summary, key metrics/guidance discussed, and the tone score, as one artifact per call. This is the concrete version of a mechanism that showed up in the very first round of notes and was never threaded into the architecture: *"monitoring when they need review, by some static signals of performance."* A concall is exactly that kind of static, dated signal — the Concall Monitor is what makes "does anything I hold need a look" a standing capability instead of something the user has to remember to check for. It's scoped the same way everything else here is: the overview and tone score are the same one-to-many artifact for every subscriber holding that name, surfaced generally — not "this changed for *you*," which would tip into personalized advice the RA registration doesn't cover.
+
 ## 7. MVP scope recommendation
 
 Building all four domains × both personas at once is too much surface for a first version. Two axes matter for sequencing, not one:
@@ -121,10 +123,11 @@ Building all four domains × both personas at once is too much surface for a fir
 
 **Phase 1 — RA-published research + Explanation Layer, for the lower-fund wedge**
 - Portfolio drift, concentration, cross-holding correlation (including MF look-through), and MF backward-tracing/manager behavior — the least commoditized slice, hardest to get from Screener/Tickertape/Trendlyne today
+- Concall Monitor scoped to fund manager commentary/interviews, feeding Fund Manager Profile — company earnings concalls come in Phase 2 with the Stock domain
 - Every thesis published through the Explanation Layer in lenient terms, since the wedge segment's blocker is comprehension as much as access
 - Everything scoped to what an RA registration actually permits: one-to-many, no personalization
 
-**Phase 2 — Stock domain**, once the reasoning layer and data pipeline are proven
+**Phase 2 — Stock domain**, once the reasoning layer and data pipeline are proven — extends the Concall Monitor to company earnings calls, feeding Sentiment & Trust
 **Phase 3 — Industry/macro overlay** (policy, geopolitics) as a context layer feeding into Phase 1/2 reasoning, rather than a standalone domain
 
 ## 8. Competitive landscape: what exists today, and the validated gap
@@ -164,6 +167,7 @@ Researched two clusters of existing Indian products against our four domains: st
 3. **Explanation Layer vs. personalized advice line** — "lenient terms" must stay a restatement of the same one-to-many thesis, not something that reads as tailored to the individual user, or it risks sliding into RIA territory the RA registration doesn't cover. Needs a concrete design rule, not just an intention, before this layer is built.
 4. **Explanation Layer mechanism** — templated per-thesis explanations, an LLM rewrite pass, inline tooltips, or a separate onboarding/literacy flow? And how is "understood by the wedge segment" actually tested?
 5. **Concall audio sourcing and quality** — recording availability/format varies by exchange and company, Indian-accented and code-switched (English/Hindi/regional) speech affects transcription and tone-model accuracy, and multiple speakers per call need attribution. Needs a proof-of-concept on real concall audio before this signal is treated as reliable enough to publish on.
+6. **Review-trigger threshold for the Concall Monitor** — what change in tone score or guidance actually warrants surfacing "this needs a look" rather than adding noise to every subscriber's feed after every call? Needs a defined, general (not per-user) threshold before this ships as a standing signal rather than a one-off overview.
 
 ## 11. Next steps
 
