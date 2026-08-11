@@ -162,6 +162,22 @@ Not every query needs the Reasoning Agent, and treating them as if they do is bo
 
 Portfolio-level aggregation (drift, concentration, correlation across a user's own holdings) stays pure computation — matrix math, not the LLM — consistent with everything else in this doc. The Reasoning Agent's job is explaining a computed aggregate, never producing one.
 
+### Cross-domain query reasoning
+
+Tier 3 above covers fan-out within one domain — many holdings, one kind of question. The harder case is a query that has to reason across genuinely different domains at once: "how does this rate hike affect my funds *and* my direct holdings *and* my portfolio's risk," or the MF look-through case from Section 5's Portfolio domain — "which of my direct holdings also show up inside my funds, and does that create hidden concentration." That needs a few things the single-domain pipeline doesn't:
+
+**A canonical entity graph, or cross-domain joins silently break.** The same company exists as a stock in the user's direct portfolio, as a holding inside several of the user's funds (via look-through), and has its own concall history and industry/policy tags — four different representations across four different data stores. Nothing below works unless one identifier (ISIN or equivalent) ties all of them together. This is a data-modeling prerequisite, not something the Reasoning Agent can paper over at query time.
+
+**Cross-domain numeric aggregation stays a quant primitive, not something assembled live.** Combined sector exposure across direct holdings plus fund look-through, or a correlation matrix spanning both, is exactly the "the LLM never does arithmetic" principle from the grounding-mechanism section above — just applied across domains instead of within one. It belongs as its own precomputed primitive (a "blended exposure" calculator, say), the same way alpha/beta/VaR do, not stitched together ad hoc from separate tool-call results inside a single reasoning pass.
+
+**A query-planning step, and the plan itself needs a grounding check, not just the answer.** A cross-domain question first has to figure out which entities and domains are actually relevant — which holdings are exposed to this policy, which funds hold this stock — before any synthesis happens. That scoping step can be wrong (miss a relevant holding, include an irrelevant one) independent of whether the final narrative is grounded, so the plan needs to be checkable against the entity graph above, not left entirely to the model's judgment.
+
+**Two independently-true facts don't earn a relationship between them for free.** This is a failure mode specific to cross-domain reasoning, distinct from the hallucination and unfaithful-narrative modes already named: the model correctly retrieves that a rate hike happened *and* that a fund underperformed, then asserts the two are connected — a claim that needs its own grounding (was that correlation actually computed?), not one it inherits just because both halves are individually true. The claims table has to treat a cross-domain relationship as its own claim requiring its own citation, never a free inference from two cited facts sitting next to each other.
+
+**Conflicting signals across domains get presented, not resolved into one verdict.** Quant primitives can say a fund is performing well while the concall signal shows the manager hedging on guidance — cross-domain reasoning will surface exactly this kind of tension regularly. Synthesizing it into one artificial conclusion drifts toward a recommendation; naming the tension explicitly is both more honest and more aligned with "reasoning, not a tip" than picking a side.
+
+**Freshness mismatches compound across domains and need to be surfaced, not glossed over.** MF holdings are a month stale (Section 11, open question 2) while price data is closer to real-time; any query joining them is combining two different "as-of" dates. That mismatch is itself a fact the citation needs to carry, not something the narrative should imply is simultaneous.
+
 ### Model architecture
 
 Two different jobs, two different model choices:
