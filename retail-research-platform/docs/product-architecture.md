@@ -43,7 +43,7 @@ Four domains, each decomposed into concrete sub-analyses. RA registration covers
 - Valuation
 - Buy range
 - Forward growth *(needs in-product education — don't assume the concept is understood)*
-- Sentiment & trust
+- Sentiment & trust *(includes concall vocal-tone analysis — see Section 6)*
 - Analyst ratings (aggregation, not the platform's own rating)
 
 **Portfolio**
@@ -59,7 +59,7 @@ Four domains, each decomposed into concrete sub-analyses. RA registration covers
 - Backward-traced portfolio performance (what actually drove the return)
 - Fund manager style bets
 - Portfolio financial parameters — alpha, beta, VaR
-- Fund manager profile
+- Fund manager profile *(same concall vocal-tone technique applies to fund manager commentary/interviews, not just company earnings calls)*
 - Fund monitoring: how actively a manager rebalances in response to market moves, and what effect that has on the fund
 
 ## 6. System Architecture
@@ -70,6 +70,7 @@ Four domains, each decomposed into concrete sub-analyses. RA registration covers
                     │  Prices · News · Product/     │
                     │  company fundamentals ·       │
                     │  Global events · Supply chains │
+                    │  Concall audio (vocal tone)    │
                     └───────────────┬──────────────┘
                                     │
    ┌───────────────────┐           │
@@ -108,6 +109,8 @@ Four domains, each decomposed into concrete sub-analyses. RA registration covers
 **Key architectural point from the original sketch, worth keeping explicit:** the Intelligence Layer is two-tiered, not one LLM call. A **quant primitives layer** computes alpha, beta, VaR, correlation, and drift deterministically from data — these are numbers, not model output, and must be auditable. A **reasoning layer** (agentic, LLM-driven) sits on top, grounded on those computed numbers plus news/events/policy context, and produces the narrative. This split matters for trust: an analyst (and a regulator) will accept a hallucination-prone LLM explaining *why* a computed VaR is high, but not an LLM inventing the VaR itself.
 
 **New from this round: the Explanation Layer is a first-class component, not a UX nice-to-have.** It sits between the reasoning agent's output and the retail surface, translating the same one-to-many RA thesis into lenient terms. Analysts see the full reasoning chain directly; retail users see the translated version. This is the layer that actually closes the wedge gap in Section 4 — the RA solves access, the Explanation Layer solves comprehension.
+
+**New from this round: concall vocal-tone analysis as a signal, alongside the transcript.** Earnings conference calls are already a data source via their text transcript (News/events). What's new is treating the *audio itself* as a second, distinct signal — management's tone, hesitation, and confidence while answering questions, which academic finance research and some analytics vendors have found carries information beyond what the transcript text alone conveys. Architecturally this is a **Quant Primitives** input, not a Reasoning Agent guess: a dedicated audio/NLP model produces a structured, versioned score (e.g. a confidence/evasiveness score per Q&A segment) that's auditable the same way alpha/beta/VaR are — the reasoning agent explains *why* the tone score moved, it doesn't invent a tone score from vibes. Applies directly to Stock's Sentiment & Trust sub-analysis and to Mutual Funds' Fund Manager Profile (the same technique run on fund manager commentary/interviews instead of company management), and it's a natural fit for the "event impact thesis" query pattern from the original notes — a concall is a discrete, dated event with both a text and an audio signal to reason over.
 
 ## 7. MVP scope recommendation
 
@@ -160,6 +163,7 @@ Researched two clusters of existing Indian products against our four domains: st
 2. **Correlation/look-through computation** — MF holdings disclosure is monthly, not real-time; bounds how "live" cross-fund correlation numbers can actually be.
 3. **Explanation Layer vs. personalized advice line** — "lenient terms" must stay a restatement of the same one-to-many thesis, not something that reads as tailored to the individual user, or it risks sliding into RIA territory the RA registration doesn't cover. Needs a concrete design rule, not just an intention, before this layer is built.
 4. **Explanation Layer mechanism** — templated per-thesis explanations, an LLM rewrite pass, inline tooltips, or a separate onboarding/literacy flow? And how is "understood by the wedge segment" actually tested?
+5. **Concall audio sourcing and quality** — recording availability/format varies by exchange and company, Indian-accented and code-switched (English/Hindi/regional) speech affects transcription and tone-model accuracy, and multiple speakers per call need attribution. Needs a proof-of-concept on real concall audio before this signal is treated as reliable enough to publish on.
 
 ## 11. Next steps
 
