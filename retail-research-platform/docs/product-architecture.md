@@ -23,7 +23,7 @@ Resolved: the firm will hold its own **SEBI Research Analyst (RA)** registration
 | RIA *(future scope)* | Personalized advice | No commission — fee/AUM only |
 | PMS *(future scope)* | Full discretionary management | High compliance overhead, high investment/net-worth threshold |
 
-Holding the RA license in-house doesn't change what the output looks like — the answer is the same either way, constrained by SEBI's RA rules (one-to-many, no personalized advice). What it changes is *who* is legally allowed to produce and publish that answer: the firm itself, rather than needing to broker third-party analysts. RIA and PMS are explicitly **not** v1 — see Section 8.
+Holding the RA license in-house doesn't change what the output looks like — the answer is the same either way, constrained by SEBI's RA rules (one-to-many, no personalized advice). What it changes is *who* is legally allowed to produce and publish that answer: the firm itself, rather than needing to broker third-party analysts. RIA and PMS are explicitly **not** v1 — see Section 9.
 
 ## 4. The wedge: lower-fund retail users locked out of research
 
@@ -114,7 +114,7 @@ Four domains, each decomposed into concrete sub-analyses. RA registration covers
 Building all four domains × both personas at once is too much surface for a first version. Two axes matter for sequencing, not one:
 
 - **Domain axis** — which analysis domain ships first
-- **Business-model axis** — RA-published research (v1) → RIA personalization → PMS management (future, Section 8)
+- **Business-model axis** — RA-published research (v1) → RIA personalization → PMS management (future, Section 9)
 
 **Phase 1 — RA-published research + Explanation Layer, for the lower-fund wedge**
 - Portfolio drift, concentration, cross-holding correlation (including MF look-through), and MF backward-tracing/manager behavior — the least commoditized slice, hardest to get from Screener/Tickertape/Trendlyne today
@@ -124,19 +124,43 @@ Building all four domains × both personas at once is too much surface for a fir
 **Phase 2 — Stock domain**, once the reasoning layer and data pipeline are proven
 **Phase 3 — Industry/macro overlay** (policy, geopolitics) as a context layer feeding into Phase 1/2 reasoning, rather than a standalone domain
 
-## 8. Future scope (explicitly not v1)
+## 8. Competitive landscape: what exists today, and the validated gap
+
+Researched two clusters of existing Indian products against our four domains: stock-research platforms (Screener, Tickertape, Trendlyne, Moneycontrol) and portfolio/MF platforms (Value Research, Morningstar India, smallcase, INDmoney, Groww, Zerodha Console/Coin, ET Money, Kuvera). The two research passes were done independently and converged on nearly identical gaps — a good signal these are real, not artifacts of one search.
+
+**By domain — what's already commoditized vs. what's missing everywhere:**
+
+| Domain | Already commoditized (who has it) | Missing everywhere |
+|---|---|---|
+| Stock | Valuation scorecards (Screener X-Ray, Tickertape Scorecard, Trendlyne DVM/SWOT), analyst-target aggregation (Tickertape, Trendlyne Forecaster) | A synthesized multi-signal thesis in prose — every "explanation" found is a threshold-triggered template ("P/E above historical average"), not reasoning |
+| Portfolio | Stock/fund overlap detection, asset/sector mix, XIRR (INDmoney, Groww, Kuvera, Value Research) | Portfolio-level correlation matrix, beta-to-benchmark, VaR on the actual combined portfolio; drift explained against a stated thesis rather than just displayed |
+| Mutual Funds | Fund screening/comparison, star ratings, style-box (Morningstar), direct fund-switch calls (ET Money, under RIA) | Continuous automated manager-style-drift/rebalancing-behavior monitoring — Morningstar's Medalist rating is the closest analog and it's a periodic human report, not a live signal |
+| Industry | Ad hoc via editorial content (Moneycontrol) | No product does systematic policy/geopolitical impact-on-holdings reasoning |
+
+**Two cross-cutting findings validate the product thesis directly, not just the domain gaps:**
+
+1. **The "reasoning, not a tip" position is genuinely unoccupied.** The market is polarized: Screener/Tickertape/Trendlyne stay strictly descriptive with zero calls; Moneycontrol Pro/Super Pro, smallcase, and ET Money issue explicit buy/sell/switch calls (mostly under RIA or aggregated third-party RA registrations). Nobody sits in between — explained reasoning grounded in deterministic metrics, without a direct call, under a firm's own RA registration. That's exactly this platform's design, confirmed as white space rather than assumed.
+2. **No genuine low-literacy explanation layer exists anywhere.** Every "beginner-friendly" surface found across all eight portfolio/MF products is marketing copy or a glossary, not an adaptive layer that translates a specific user's specific numbers into plain language. This directly confirms Section 5's wedge — the comprehension gap for lower-fund retail users is real and currently unaddressed, not already being solved by someone else under a different name.
+
+**What "aggregated and dynamic" concretely means, given this landscape:** almost every individual capability above already exists *somewhere* — overlap detection at INDmoney, style-box at Morningstar, scorecards at Tickertape — but split across products a user has to stitch together themselves, and every one of them is a static dashboard or templated screen. The aggregation is domain coverage (stock + portfolio + MF + industry in one reasoning core, not four separate apps); the "dynamic" part is that it's answerable through natural-language/parametrized query against the Intelligence Layer (Section 6), grounded in deterministic quant primitives, rather than pre-built screens the user has to know to go looking for.
+
+**Competitive signal worth tracking, not dismissing:** INDmoney shipped an MCP server letting users query their real portfolio in plain English via Claude, and Groww has a beta "GR1" AI assistant plus its own MCP integration — both 2026-era moves toward exactly the NL-query territory this platform is aiming at. Neither is grounded in deterministic quant primitives (they route through general-purpose LLMs), neither pairs with a compliance-scoped explanation layer, and both are opt-in/beta rather than the core product — but "having an NL chat over your portfolio" is becoming table stakes faster than expected. Differentiation has to rest on the quant-primitive grounding, the RA-licensed reasoning-not-advice stance, and the literacy-tiered Explanation Layer — not on NL query access alone.
+
+**Confidence note:** several SEBI registration claims above (Value Research Advisor, Morningstar India, Trendlyne, Moneycontrol's in-house research team, Groww's GR1) were not verified against the SEBI intermediary registry directly — flagged by both research passes as needing direct verification before being cited externally. Worth resolving cleanly for this platform's own registration story regardless, since registration transparency is inconsistent industry-wide and is itself a trust differentiator.
+
+## 9. Future scope (explicitly not v1)
 
 - **RIA advisory** — personalized recommendations by goal and risk profile (long-term / liquid-money / passive-income goal types; aggressive vs. conservative return expectations), fee-on-AUM monetization. Layer on top of a proven RA research core once users need more than research access.
 - **PMS** — full discretionary management for HNI/UHNI/Family Wealth/Business People Money segments, once compliance infrastructure justifies the overhead.
 - Broader instrument coverage — Bonds, REITs, Real Estate, Govt Securities — beyond the Stock/MF core.
 
-## 9. Open questions to resolve before building
+## 10. Open questions to resolve before building
 
 1. **Data sourcing** — which data vendor(s) for prices/fundamentals/news for Indian equities & MFs (e.g. NSE/BSE feeds, AMFI for MF data, a news/sentiment API)? Determines cost structure early.
 2. **Correlation/look-through computation** — MF holdings disclosure is monthly, not real-time; bounds how "live" cross-fund correlation numbers can actually be.
 3. **Explanation Layer vs. personalized advice line** — "lenient terms" must stay a restatement of the same one-to-many thesis, not something that reads as tailored to the individual user, or it risks sliding into RIA territory the RA registration doesn't cover. Needs a concrete design rule, not just an intention, before this layer is built.
 4. **Explanation Layer mechanism** — templated per-thesis explanations, an LLM rewrite pass, inline tooltips, or a separate onboarding/literacy flow? And how is "understood by the wedge segment" actually tested?
 
-## 10. Next steps
+## 11. Next steps
 
 Once data sourcing is confirmed and the Explanation Layer's compliance boundary (open question 3) has a concrete answer, this doc has enough to break Phase 1 into: (a) quant primitives service (drift/concentration/correlation/alpha/beta/VaR calculators), (b) data ingestion for prices + AMFI MF holdings, (c) RA reasoning agent grounded on (a)+(b), (d) Explanation Layer translating (c) for retail, (e) dashboard/list surface for retail and analyst views.
