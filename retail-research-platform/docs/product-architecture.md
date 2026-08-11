@@ -157,6 +157,26 @@ Two different jobs, two different model choices:
 - **Explanation Layer**: a narrower job — rewrite an already-approved thesis into lenient language, not generate new claims. This can run on a smaller/cheaper model, but more importantly, its prompt has to be constrained to **rewrite only**: forbidden from adding claims, numbers, or recommendations the Reasoning Agent didn't already produce. That constraint is what keeps it inside the "not personalized advice" boundary from Section 11, open question 3 — it's a compliance requirement enforced through the prompt/architecture, not just a style choice.
 - **Tool-use boundary**: the Reasoning Agent should only be able to call a fixed, small set of internal tools (quant primitives service, concall overview, news/events) — no freeform web access. That constraint is what makes both auditability and citation, below, tractable: every claim in an output can be traced to a specific tool call with a specific timestamp, because there's nowhere else the claim could have come from.
 
+### Grounded reasoning vs. black-box reasoning — the actual mechanism
+
+"Grounded" has been used a lot in this doc without saying what enforces it. It's not a property a model has by default, and it's not the same thing as the model *sounding* like it's reasoning carefully. It has to be a mechanism, checkable independently of the model's own narrative about itself.
+
+**Core rule: the Reasoning Agent is never allowed to "know" a fact — only to retrieve and reason over facts it was handed.** Anything specific — a number, a date, a guidance line, a rating — has to come from a tool call in this session, never from the model's training data or free association. This is what the tool-use boundary above actually buys: not just tidiness, but the precondition for everything below being checkable.
+
+**Two distinct failure modes, worth naming separately because they need different defenses:**
+- **Hallucination** — the model states a number or fact that wasn't in what it retrieved. The defense is mechanical: verify every claim against the tool-call log.
+- **Unfaithful narrative** — the model retrieved the *correct* facts, but the reasoning it writes down isn't actually how it got to its conclusion — it's a plausible-sounding post-hoc story wrapped around a judgment made some other way. This is a well-documented property of LLM chain-of-thought in general, not a bug specific to this build, and it's the more dangerous failure mode for a platform whose entire premise is "reasoning, not a tip" — if the reasoning is decorative rather than load-bearing, the compliance posture built on top of it (Section 3) is decorative too.
+
+**The pipeline that makes groundedness checkable rather than aspirational:**
+1. Tool-only fact injection (above) — no fact enters the context except through a logged tool call.
+2. **Two-stage generation, not one pass.** Stage one produces a structured claims table — each claim explicitly paired with the tool-call ID/field/timestamp it came from. Stage two turns that already-verified table into prose. This matters because it shrinks where hallucination can actually occur: stage two is generating narrative from pre-verified structured data, not reaching back into raw context and inventing connective tissue between facts.
+3. **A programmatic grounding gate before publication, not just an offline eval.** Every numeric or factual claim in the final narrative gets checked against the claims table; anything that doesn't match blocks publication. Given the compliance stakes here, this needs to be a hard gate in the pipeline, not a periodic quality check run separately from it.
+4. **Chain-of-thought, if the model produces one, gets logged for debugging but is explicitly not treated as proof of grounding.** Because CoT faithfulness isn't guaranteed (see "unfaithful narrative" above), the structured citation schema — not the model's visible reasoning text — is the actual evidentiary artifact. Don't let a convincing-looking reasoning trace substitute for the mechanical check.
+
+**What stays a black box, deliberately, and why that's fine:** the model's internal token-level computation — attention, latent representations — is not something this architecture opens up, and doesn't need to. The promise being made isn't mechanistic interpretability of a neural network, which nobody can actually deliver today; it's a verifiable evidentiary chain from input data to published claim. That's a narrower, more honest, and more achievable bar — and it's also the one that actually satisfies a skeptical analyst or a regulator asking "how did you get this," since neither wants a transformer's internals, they want to know the number is real.
+
+**This is also why the Explanation Layer has to rewrite the claims table, not the free narrative** (constraint already stated above) — rewriting already-grounded, structured claims into lenient language keeps the retail-facing surface inside the same checkable pipeline. Rewriting the *narrative* instead would reopen exactly the black-box risk this section exists to close, one layer downstream of where it was solved.
+
 ### Evals
 
 Given the compliance stakes, evals split into two categories that need different rigor:
