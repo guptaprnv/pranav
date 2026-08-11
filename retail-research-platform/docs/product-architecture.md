@@ -149,6 +149,19 @@ Consolidating what's been scattered across earlier open questions, now that conc
 
 Worth flagging explicitly: the concall sourcing answer (public filings, scrapable) does **not** generalize to live prices and fundamentals — those are commercially licensed data, a different sourcing category with a different cost and legal structure. Don't let the concall resolution create false confidence that the rest of the data-sourcing open question is similarly easy.
 
+### Query handling & aggregation
+
+Not every query needs the Reasoning Agent, and treating them as if they do is both slower and riskier than necessary — more LLM surface area means more grounding-gate work and more cost for questions that are actually just arithmetic. A query router should triage by what the query actually requires, not send everything through the same pipeline:
+
+- **Tier 0 — direct lookup** ("what's fund X's alpha"): straight to the quant primitives service, no LLM involved at all. Fastest, cheapest, and zero hallucination surface, because nothing is generated.
+- **Tier 1 — structured screen/filter** ("midcap funds, 3Y alpha > 1, manager tenure > 5Y"): a small model translates the NL query into a structured filter (the analyst's parametrized query needs no translation at all), the filter executes deterministically against precomputed data, and only the result narration — if any — touches the Reasoning Agent.
+- **Tier 2 — synthesis/explanation** ("why is my portfolio drifting"): the full two-stage grounded pipeline described below — this is genuinely where the Reasoning Agent's cost and latency belong.
+- **Tier 3 — fan-out/aggregate** ("does anything I hold need a look," "how does this RBI policy affect my holdings"): the expensive one, and the one that needs the most deliberate design.
+
+**The single most important aggregation decision: compute once per entity, not once per user.** The RA constraint (one-to-many, no personalization) isn't only a compliance boundary — it's also what makes this affordable. If subscribers hold overlapping names, "does this stock need review" has to be computed once per stock, on the Concall Monitor's schedule (Section 6), and then looked up per user's holdings — not re-reasoned separately for every user asking about the same underlying event. Designing it the other way — live fan-out reasoning per user per query — is the kind of mistake that's cheap to make early and expensive to unwind under load, so it belongs in the architecture now, not as a later optimization.
+
+Portfolio-level aggregation (drift, concentration, correlation across a user's own holdings) stays pure computation — matrix math, not the LLM — consistent with everything else in this doc. The Reasoning Agent's job is explaining a computed aggregate, never producing one.
+
 ### Model architecture
 
 Two different jobs, two different model choices:
@@ -176,6 +189,23 @@ Two different jobs, two different model choices:
 **What stays a black box, deliberately, and why that's fine:** the model's internal token-level computation — attention, latent representations — is not something this architecture opens up, and doesn't need to. The promise being made isn't mechanistic interpretability of a neural network, which nobody can actually deliver today; it's a verifiable evidentiary chain from input data to published claim. That's a narrower, more honest, and more achievable bar — and it's also the one that actually satisfies a skeptical analyst or a regulator asking "how did you get this," since neither wants a transformer's internals, they want to know the number is real.
 
 **This is also why the Explanation Layer has to rewrite the claims table, not the free narrative** (constraint already stated above) — rewriting already-grounded, structured claims into lenient language keeps the retail-facing surface inside the same checkable pipeline. Rewriting the *narrative* instead would reopen exactly the black-box risk this section exists to close, one layer downstream of where it was solved.
+
+### Optimizing reasoning — concrete levers
+
+- **Model tiering by query tier**, from above — a small/fast model for Tier 1 translation and narration, the frontier model reserved for Tier 2/3 synthesis, where it's actually earning its cost.
+- **Precompute over live compute.** Anything that doesn't depend on the specific query — a stock's concall overview, a fund's alpha/beta as of today — gets computed once when the underlying event happens (new concall, daily close) and read at query time, not recalculated inline. This is a latency and cost lever, and an auditability lever at the same time: the precomputed artifact and its log entry are the same object.
+- **Prompt caching on the static grounded context.** The quant-primitive snapshot and concall overview for a given stock/fund don't change between queries about it; caching that context rather than reprocessing it per query is the difference between reasoning cost scaling with query volume and reasoning cost scaling with underlying events — a much smaller number.
+- **Match reasoning depth to query complexity**, not a fixed depth for every Tier 2/3 call. A single concall-triggered "why did this move" needs less than "explain my whole portfolio's risk profile across 20 holdings." Spending the same compute on both wastes it on the easy end and probably under-serves the hard end.
+
+### Bottlenecks worth designing around now, not discovering later
+
+1. **Fan-out cost, restated as the top risk.** The compute-once-per-entity principle above is a design decision, not a later optimization — getting it wrong at the start means re-architecting under load, not tuning a parameter after the fact.
+2. **Data freshness ceiling.** MF holdings disclosure is monthly (Section 11, open question 2) and price/fundamentals vendor freshness is still an open question (Data sources, above). No amount of reasoning optimization fixes a "dynamic" answer sitting on stale source data — this bounds how real-time the product can honestly claim to be, independent of model choice.
+3. **Portfolio-scale context cost.** A user with many holdings, asking a portfolio-wide question, means assembling quant primitives, concall signals, and news for every holding into one grounded context. This needs a scaling plan — a materiality threshold, or hierarchical summarization (per-holding summaries first, portfolio synthesis over summaries rather than raw data) — worked out before it's tested against a user with 40 holdings, not after.
+4. **Grounding-gate failure handling.** When the hard gate rejects an output over an unverified claim, what happens at request time matters: an unbounded retry loop is a cost and latency risk, and quietly bypassing the gate under latency pressure defeats the entire mechanism from the section above. The safe default is graceful degradation to the structured data alone, no narrative — not either extreme.
+5. **Compliance-aware routing for direct-advice requests.** Retail NL queries will regularly ask for exactly what the RA registration prohibits — "should I sell this now." The query router needs a dedicated branch that recognizes this and redirects to the reasoning framing, not a tier classifier that only sorts by complexity and lets a direct-advice request slip into normal synthesis.
+6. **Concall signal reliability feeding everything downstream.** The accent/code-switching/attribution risk flagged in Section 11 isn't only a sourcing question — a noisy concall signal degrades every reasoning output that cites it, worth resolving before this primitive is trusted the way alpha/beta are.
+7. **Eval coverage has to track query-type diversity.** A single eval set built around synthesis-style queries won't catch failures specific to fan-out aggregation or screen/filter translation — blind spots show up exactly in the query types the eval set doesn't represent, so coverage needs to expand as query tiers get built, not stay fixed at what the Evals subsection below already describes.
 
 ### Evals
 
