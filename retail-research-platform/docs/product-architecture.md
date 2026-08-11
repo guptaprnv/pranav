@@ -178,6 +178,46 @@ Tier 3 above covers fan-out within one domain — many holdings, one kind of que
 
 **Freshness mismatches compound across domains and need to be surfaced, not glossed over.** MF holdings are a month stale (Section 11, open question 2) while price data is closer to real-time; any query joining them is combining two different "as-of" dates. That mismatch is itself a fact the citation needs to carry, not something the narrative should imply is simultaneous.
 
+### Review Trigger framework — generalizing beyond concall
+
+A worked example forced this: *"stocks which need review — from performance, concentration, or thematic risk, across MFs and stocks."* The Concall Monitor (Section 6) is already a review-trigger mechanism, but scoped to one signal source. This query makes clear it needs to generalize into a framework, with concall as one instance rather than the whole thing — the same "static signals of performance" idea from the very first round of notes, just with more signal sources feeding it than originally scoped.
+
+Two trigger categories, not one:
+- **Entity-level triggers** — computed per stock/fund, same pattern as the Concall Monitor: performance decline, concentration/thematic breach. Each needs its own defined, general threshold (Section 11, open question 6 already flags this for concall specifically; the same requirement now applies to performance and concentration triggers too).
+- **Macro-level triggers** — computed once per macro event (a rate decision, a large commodity move), then fanned out to every subscriber with material exposure, rather than computed per user. New category, introduced by the next worked example.
+
+**The screening query itself decomposes the same way everything else in this section does.** The filtering step — which names trip a threshold — is deterministic: precomputed per-entity scores checked against thresholds, no LLM. Only the flagged subset goes to Tier 2 for the "why," reusing precomputed artifacts rather than reasoning live per user.
+
+**"Across MFs and stocks" requires blended exposure, which confirms the primitive already proposed under cross-domain reasoning above** — concentration and thematic exposure computed on direct-plus-look-through holdings, summed per underlying company via the entity graph, rolled up to theme/sector level. Not a hypothetical use case for that primitive; a direct one.
+
+**Thematic risk introduces a genuinely open question sector classification doesn't have.** Sector has an established standard to lean on (GICS or equivalent). Theme doesn't — someone has to define and maintain what counts as, say, a "China+1" or "rate-sensitive" theme, which is an editorial/curatorial choice, not a computation. Needs an owner and a maintenance cadence, and possibly its own disclosure, since it's the platform's own methodology rather than an external standard. Tracked as open question 7 in Section 11.
+
+### Macro factor exposure & event impact reasoning
+
+The other worked example — *"how would oil price, the current war, or an RBI repo rate change affect my portfolio"* — is the "event impact thesis" query pattern that's been an unfleshed bullet under the Industry domain (Section 5) since the first draft. The three examples aren't the same shape of input, and that split matters architecturally:
+
+- **RBI repo rate and oil price are discrete or continuous but quantifiable** — a clean before/after number (+25bps, oil up 15%).
+- **"Current war" is open-ended** — no single number to shock, situational and evolving.
+
+That means two different mechanisms under one query type, not one:
+
+**For quantifiable factors:** a new primitive, **factor exposure / macro-beta** — the same statistical idea as market beta, regressed against oil price or repo rate history instead of the index, computed per stock. Portfolio-level exposure is a weighted sum via the entity graph — mechanical, no LLM — giving a real number ("your portfolio's oil-beta is X, driven mainly by holdings A, B, C") instead of a narrative guess at exposure. The same thin-data confidence flagging described below applies here too: a newly-listed stock won't have enough history for a reliable regression.
+
+**For open-ended events:** there's no variable to regress against, so forcing this into the factor-beta framework would be false precision in the opposite direction from hallucination — inventing a number that doesn't deserve to exist. This stays grounded narrative synthesis over news: which holdings are named or sector-implicated, what the transmission channel is. Tier 2, citation-heavy, no computed beta behind it.
+
+**This is also a macro-level Review Trigger**, per the framework above: a large oil move or an RBI decision is exactly the kind of signal that should compute once and fan out to every subscriber with material factor exposure, not get reasoned about per user per query.
+
+### The personalization boundary — one general principle instead of three
+
+Three separate places in this doc ask a version of the same question — does something stay one-to-many research, or does it edge into personalized advice the RA registration doesn't cover:
+- The Explanation Layer rewriting a thesis into lenient terms (Section 11, open question 3)
+- The Concall Monitor generating a per-holding overview (Section 6)
+- A factor-exposure computation run against a specific user's specific holdings (above)
+
+Proposed general principle, rather than resolving each separately: **a general, one-to-many thesis or computation, applied mechanically to a user's own portfolio composition, stays research. The line gets crossed only when the substance of the thesis itself is tailored to the individual** — not when the arithmetic happens to use their numbers. "Rate hikes pressure rate-sensitive sectors" is generic; "your portfolio's rate-beta is X, from holdings A/B/C" is that same generic thesis run against the user's own composition — still research under this framing. "You should sell your bank stocks because rates are rising" is a tailored recommendation — the platform's stated design already refuses to produce that.
+
+This is a proposal, not a resolved compliance answer — it still needs sign-off from whoever handles the RA registration before being treated as settled, same caveat as everything else compliance-adjacent in this doc.
+
 ### Model architecture
 
 Two different jobs, two different model choices:
@@ -205,6 +245,21 @@ Two different jobs, two different model choices:
 **What stays a black box, deliberately, and why that's fine:** the model's internal token-level computation — attention, latent representations — is not something this architecture opens up, and doesn't need to. The promise being made isn't mechanistic interpretability of a neural network, which nobody can actually deliver today; it's a verifiable evidentiary chain from input data to published claim. That's a narrower, more honest, and more achievable bar — and it's also the one that actually satisfies a skeptical analyst or a regulator asking "how did you get this," since neither wants a transformer's internals, they want to know the number is real.
 
 **This is also why the Explanation Layer has to rewrite the claims table, not the free narrative** (constraint already stated above) — rewriting already-grounded, structured claims into lenient language keeps the retail-facing surface inside the same checkable pipeline. Rewriting the *narrative* instead would reopen exactly the black-box risk this section exists to close, one layer downstream of where it was solved.
+
+### Ambiguity & confidence handling
+
+Not every reasoning output is equally certain, and treating all of them as equally confident is itself a failure mode — three distinct problems bundled under "ambiguous or low-confidence," each needing different handling:
+
+1. **Ambiguous query (input-side)** — "is my portfolio too concentrated," "midcap fund better now," without specifying the axis or comparison. Caught at the router, before the expensive Tier 2/3 pipeline runs — either a clarifying question, or the assumed interpretation stated explicitly up front ("interpreting this as sector concentration — say if you meant something else"), never a silent guess run through as if it were unambiguous.
+2. **Weak or conflicting underlying data (signal-side)** — a fund with 6 months of history giving a statistically shaky alpha, or a quant primitive disagreeing with the concall signal. Partly covered under cross-domain reasoning above (conflicting signals get presented, not resolved into a verdict), but this happens within a single domain too, not only across domains.
+3. **The model's own uncertainty inside a synthesis** — even with solid grounded facts, whether a given connection is load-bearing or tenuous is a judgment call embedded in the narrative.
+
+The mechanism, consistent with everything else in this section: **confidence is a structural field in the claims table, next to the citation — computed, not self-reported.** LLM self-reported confidence is known to be poorly calibrated, so it shouldn't be the model stating a percentage. It should be a deterministic property of the signal — sample size, data age, cross-source agreement — computed the same way alpha/beta is computed, applying the "the LLM never does arithmetic" principle to confidence instead of to numbers.
+
+Three consequences of that:
+- **The grounding gate also gates on confidence, not just citation.** A claim can be perfectly grounded — a real, logged number — and still misleading presented without its confidence caveat. Below some threshold, the gate should require the caveat to survive into the output, not just verify the number exists.
+- **The Explanation Layer has to preserve the caveat through the rewrite, not smooth it away for readability.** Silently dropping "based on limited history" while simplifying language changes the epistemic status of the claim — arguably worse than dropping the claim outright, and exactly the kind of drift the rewrite-only constraint (Model architecture, above) exists to prevent.
+- **When confidence is too low to synthesize anything useful, the answer is to say that, not force a narrative.** Same graceful-degradation instinct as the grounding-gate failure case (Bottlenecks, below) — and it's a compliance point as much as a UX one: a licensed RA overstating confidence in a published one-to-many thesis is real regulatory exposure, not a rough edge.
 
 ### Optimizing reasoning — concrete levers
 
@@ -293,10 +348,11 @@ Researched two clusters of existing Indian products against our four domains: st
 
 1. **Data sourcing** — which data vendor(s) for prices/fundamentals/news for Indian equities & MFs (e.g. NSE/BSE feeds, AMFI for MF data, a news/sentiment API)? Determines cost structure early.
 2. **Correlation/look-through computation** — MF holdings disclosure is monthly, not real-time; bounds how "live" cross-fund correlation numbers can actually be.
-3. **Explanation Layer vs. personalized advice line** — "lenient terms" must stay a restatement of the same one-to-many thesis, not something that reads as tailored to the individual user, or it risks sliding into RIA territory the RA registration doesn't cover. Needs a concrete design rule, not just an intention, before this layer is built.
+3. **Explanation Layer vs. personalized advice line — proposed resolution, needs compliance sign-off.** "Lenient terms" must stay a restatement of the same one-to-many thesis, not something that reads as tailored to the individual user, or it risks sliding into RIA territory the RA registration doesn't cover. Section 7's "personalization boundary" now proposes a general rule for this and two related cases (Concall Monitor overviews, factor-exposure computations): a general thesis applied mechanically to a user's own portfolio composition stays research; the line is crossed only when the thesis's substance is tailored to the individual. Still needs sign-off from whoever handles the RA registration before treated as settled.
 4. **Explanation Layer mechanism** — templated per-thesis explanations, an LLM rewrite pass, inline tooltips, or a separate onboarding/literacy flow? And how is "understood by the wedge segment" actually tested?
 5. **Concall transcript sourcing — resolved direction; the vendor decision is now the only open piece.** SEBI LODR **Regulation 46(2)(o)** requires listed companies to publish the call recording within 24 hours (or before next trading day) and a **written transcript within 5 working days**, hosted for a minimum of 5 years; the same materials get filed to BSE/NSE under Regulation 30. Confidence on the regulation itself is now high — the specific 24-hour/5-working-day/5-year figures are corroborated near-verbatim across multiple independent company IR compliance pages (SBI, KEI Industries, Garware, Ceigall, and others), which is strong evidence even without a direct fetch from sebi.gov.in (blocked in this environment both times it was tried). Sourcing itself turns out to be a **buy, not build** decision: this is a live, multi-vendor market, not something we need our own scraper for — Multibagg ("Concall Monitor" — recordings, transcripts, AI summaries), Earnings Pulse (concall calendar + transcripts + AI summaries, ~₹1,799/year), AlphaStreet India (institutional-grade, claims an API), Trendlyne, and StockAdda all already do transcript aggregation with AI summarization. Self-built speech-to-text stays a fallback only, for the rare company that's late or non-compliant on the filing. **Remaining work is a vendor bake-off** — coverage breadth, data freshness, licensing terms for redistribution through our own reasoning layer, and price — not a build decision.
-6. **Review-trigger threshold for the Concall Monitor** — what change in the language-signal score or guidance actually warrants surfacing "this needs a look" rather than adding noise to every subscriber's feed after every call? Needs a defined, general (not per-user) threshold before this ships as a standing signal rather than a one-off overview.
+6. **Review-trigger threshold for the Concall Monitor** — what change in the language-signal score or guidance actually warrants surfacing "this needs a look" rather than adding noise to every subscriber's feed after every call? Needs a defined, general (not per-user) threshold before this ships as a standing signal rather than a one-off overview. Now one instance of the broader Review Trigger framework (Section 7) — the same threshold-definition problem applies to its performance, concentration, and macro-factor trigger categories too.
+7. **Thematic taxonomy ownership** — unlike sector (GICS or equivalent), there's no external standard for "theme." Someone has to define and maintain what counts as, say, a "China+1" or "rate-sensitive" theme — an editorial choice, not a computation. Needs an owner, a maintenance cadence, and possibly its own disclosure before thematic risk (Section 5, Portfolio domain) ships as a screenable criterion.
 
 ## 12. Next steps
 
