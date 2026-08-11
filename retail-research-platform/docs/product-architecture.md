@@ -77,21 +77,22 @@ Four domains, each decomposed into concrete sub-analyses. RA registration covers
    │  User Query Layer   │──────────┤
    │  Retail: NL query    │          │
    │  Analyst: params     │          ▼
-   │  + Holdings/portfolio│  ┌───────────────────────┐
-   └───────────────────┘   │   Intelligence Layer     │
-                            │  ┌─────────────────────┐ │
-   ┌───────────────────┐   │  │ Quant primitives     │ │
-   │   MF-specific        │──▶│ (alpha, beta, VaR,   │ │
-   │   context: portfolio │   │  correlation, drift) │ │
-   │   changes, past perf,│   └──────────┬───────────┘ │
-   │   manager review,    │              │             │
-   │   rebalance frequency│              ▼             │
-   └───────────────────┘   │  ┌─────────────────────┐ │
-                            │  │ Reasoning agent       │ │
-                            │  │ (RA thesis, grounded  │ │
-                            │  │  on quant + data)     │ │
-                            │  └──────────┬───────────┘ │
-                            └─────────────┼─────────────┘
+   │  + Holdings/portfolio│  ┌─────────────────────────┐
+   └───────────────────┘   │    Intelligence Layer     │
+                            │  ┌──────────────────────┐ │
+   ┌───────────────────┐   │  │ Quant primitives       │ │
+   │   MF-specific        │──▶│ alpha, beta, VaR,      │ │
+   │   context: portfolio │   │ correlation, drift,    │ │
+   │   changes, past perf,│   │ concall language signal│ │
+   │   manager review,    │   └──────────┬─────────────┘ │
+   │   rebalance frequency│              │               │
+   └───────────────────┘   │              ▼               │
+                            │  ┌──────────────────────┐ │
+                            │  │ Reasoning agent        │ │
+                            │  │ (RA thesis, grounded   │ │
+                            │  │  on quant + data)      │ │
+                            │  └──────────┬─────────────┘ │
+                            └─────────────┼───────────────┘
                                           │
                     ┌─────────────────────┼─────────────────────┐
                     ▼                     ▼                     ▼
@@ -106,7 +107,9 @@ Four domains, each decomposed into concrete sub-analyses. RA registration covers
                                                      analyst view stays full-detail
 ```
 
-**Key architectural point from the original sketch, worth keeping explicit:** the Intelligence Layer is two-tiered, not one LLM call. A **quant primitives layer** computes alpha, beta, VaR, correlation, and drift deterministically from data — these are numbers, not model output, and must be auditable. A **reasoning layer** (agentic, LLM-driven) sits on top, grounded on those computed numbers plus news/events/policy context, and produces the narrative. This split matters for trust: an analyst (and a regulator) will accept a hallucination-prone LLM explaining *why* a computed VaR is high, but not an LLM inventing the VaR itself.
+*(Concall language signal is now shown directly inside Quant Primitives — it's a first-class primitive, not a footnote. See the paragraph below for why it belongs there rather than in the Reasoning Agent.)*
+
+**Key architectural point from the original sketch, worth keeping explicit:** the Intelligence Layer is two-tiered, not one LLM call. A **quant primitives layer** computes alpha, beta, VaR, correlation, drift, and — as of this round — the concall language-signal score, deterministically/structurally from data — these are numbers, not model output, and must be auditable. A **reasoning layer** (agentic, LLM-driven) sits on top, grounded on those computed numbers plus news/events/policy context, and produces the narrative. This split matters for trust: an analyst (and a regulator) will accept a hallucination-prone LLM explaining *why* a computed VaR is high, but not an LLM inventing the VaR itself. The same test is why the concall signal lives here and not as something the Reasoning Agent free-associates from a transcript on the fly.
 
 **New from this round: the Explanation Layer is a first-class component, not a UX nice-to-have.** It sits between the reasoning agent's output and the retail surface, translating the same one-to-many RA thesis into lenient terms. Analysts see the full reasoning chain directly; retail users see the translated version. This is the layer that actually closes the wedge gap in Section 4 — the RA solves access, the Explanation Layer solves comprehension.
 
