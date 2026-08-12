@@ -1,0 +1,18 @@
+Scheme Code;ISIN Div Payout/ISIN Growth;ISIN Div Reinvestment;Scheme Name;Net Asset Value;Date
+
+Open Ended Schemes(Equity Scheme - Large Cap Fund)
+Example One Mutual Fund
+100101;INF000A01AA1;INF000A01AB9;Example One Large Cap Fund - Direct Plan - Growth;145.6721;06-Aug-2026
+100102;INF000A01AC7;INF000A01AD5;Example One Large Cap Fund - Regular Plan - Growth;138.2210;06-Aug-2026
+100103;INF000A01AE3;INF000A01AF0;Example One Large Cap Fund - Direct Plan - IDCW;98.4410;06-Aug-2026
+
+Open Ended Schemes(Equity Scheme - Mid Cap Fund)
+Example Two Asset Management Limited
+100201;INF000B01BA9;INF000B01BB7;Example Two Mid-Cap Opportunities Fund - Direct Plan - Growth;77.1234;06-Aug-2026
+100202;INF000B01BC5;INF000B01BD3;Example Two Mid-Cap Opportunities Fund - Regular Plan - Growth;71.8890;06-Aug-2026
+
+Open Ended Schemes(Debt Scheme - Liquid Fund)
+Example Three Mutual Fund
+100301;INF000C01CA7;INF000C01CB5;Example Three Liquid Fund - Direct Plan - Growth;3421.5500;06-Aug-2026
+100302;INF000C01CC3;;Example Three Liquid Fund - Growth;3390.1200;N.A.
+100303;;;Example Three Overnight Fund - Direct - Reinvestment;N.A.;N.A.
