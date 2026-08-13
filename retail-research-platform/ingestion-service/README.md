@@ -36,10 +36,53 @@ be mistaken for having decided the numbers.
 | Scheme master client | **Done, untestable here.** Real `httpx` fetch against amfiindia.com, plus `load_scheme_master()` for a downloaded snapshot |
 | Entity resolution | **Machinery done, blocked on ING-1/2/3/4.** `resolve()` raises until thresholds are decided |
 | Confirmation gate | **Done.** `ParsedPortfolio.is_ready_to_compute()` requires both user confirmation and full resolution |
+| Monthly disclosure parser | **Done.** CSV + Excel, header-alias column mapping, fails loudly on unidentifiable columns rather than falling back to column order |
+| Look-through aggregation | **Done.** Fund weights × disclosed holdings → per-ISIN exposure, with uncovered weight reported |
 | Screenshot extraction | **Not built** — needs the hand-labelled corpus first |
 | CAS PDF extraction | **Not built** — needs sample CAMS/KFintech files (redacted is fine) |
 
-32 tests, all passing.
+58 tests, all passing.
+
+## Monthly portfolio disclosures
+
+This is the half of MF ingestion that the leak engine actually needs: the scheme
+master says which funds exist, disclosures say what each fund *holds*. Look-through
+concentration and fund overlap are both computed from this.
+
+Column identification is by header alias, not position — AMC wording varies
+("% to Net Assets" / "% to NAV" / "% of Net Assets") and footnote markers are common.
+If a required column can't be identified, parsing **fails** with the headers it saw,
+rather than guessing by position. Adding a new AMC's wording is an edit to `_ALIASES`
+plus a test, not new parsing logic.
+
+**One parsing rule worth reviewing**, since it's the closest thing here to a judgement
+call: subtotal rows (`Sub Total`, `Total`, `Grand Total`) carry both a name and a
+percentage, so a naive parser reads them as holdings and every look-through exposure
+roughly doubles. `is_structural_row()` excludes them, requiring **two** signals — the
+name matches a total-ish pattern *and* the row has no ISIN. Name alone would misclassify
+a genuine holding in a company whose name contains "total" (TotalEnergies is a real
+listed company); ISIN alone would misclassify legitimately unlisted holdings. Excluded
+rows go to `unmapped_rows` rather than being dropped silently.
+
+## Look-through
+
+`lookthrough.compute_look_through()` returns an exposure table. It does **not** decide
+what counts as concentrated — that's CONC-2/CONC-3, undecided — so nothing it returns
+is labelled a finding.
+
+Two limits, both traceable to `decisions.md`:
+- **ISIN grain, not company.** Rolling multiple ISINs up to one company (ordinary vs DVR
+  shares) is CONC-1 and undecided. ISIN-grain output is a floor on true company exposure,
+  never an overstatement.
+- **Holdings without an ISIN are excluded and reported, not name-matched.** Matching
+  "Reliance Industries Ltd" to "Reliance Inds." across two AMCs' files is the ING-3
+  fuzzy-matching problem; guessing it would silently merge or split companies inside the
+  headline number.
+
+`LookThroughResult.unresolved_weight` carries the share of the portfolio that couldn't be
+looked through — funds with no disclosure loaded, plus holdings with no ISIN. A
+concentration figure computed over 60% of a portfolio but presented as covering 100% is
+misleading in exactly the way the citation rule exists to prevent.
 
 ## AMFI network access
 
